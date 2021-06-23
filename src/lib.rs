@@ -1,8 +1,31 @@
+//! # Ansi-cut
+//!
+//! A library for cutting a string while preserving colors.
+//!
+//! ## Example
+//!
+//! ```
+//! use ansi_cut::AnsiCut;
+//! use owo_colors::{colors::*, OwoColorize};
+//!
+//! let colored_text = "When the night has come"
+//!     .fg::<Black>()
+//!     .bg::<White>()
+//!     .to_string();
+//!
+//! let cutted_text = colored_text.cut(5..);
+//!
+//! println!("{}", cutted_text);
+//! ```
+
 use ansi_parser::AnsiSequence;
 use ansi_parser::{AnsiParser, Output};
 use std::ops::{Bound, RangeBounds};
 
+/// AnsiCut a trait for a cut string while keeping information
+/// about its color
 pub trait AnsiCut {
+    /// Cut string from the begging of the range to the end
     fn cut<R>(&self, range: R) -> String
     where
         R: RangeBounds<usize>;
