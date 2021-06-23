@@ -2,7 +2,31 @@ use ansi_parser::AnsiSequence;
 use ansi_parser::{AnsiParser, Output};
 use std::ops::{Bound, RangeBounds};
 
-pub fn cut<S, R>(string: S, bounds: R) -> String
+pub trait AnsiCut {
+    fn cut<R>(&self, range: R) -> String
+    where
+        R: RangeBounds<usize>;
+}
+
+impl AnsiCut for &str {
+    fn cut<R>(&self, range: R) -> String
+    where
+        R: RangeBounds<usize>,
+    {
+        crate::cut(&self, range)
+    }
+}
+
+impl AnsiCut for String {
+    fn cut<R>(&self, range: R) -> String
+    where
+        R: RangeBounds<usize>,
+    {
+        crate::cut(&self, range)
+    }
+}
+
+fn cut<S, R>(string: S, bounds: R) -> String
 where
     S: AsRef<str>,
     R: RangeBounds<usize>,
