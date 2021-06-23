@@ -1,5 +1,5 @@
-use owo_colors::{colors::*, OwoColorize};
 use ansi_cut::AnsiCut;
+use owo_colors::{colors::*, OwoColorize};
 
 pub fn main() {
     let colored_text = format!(
