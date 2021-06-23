@@ -3,6 +3,14 @@ name = "ansi-cut"
 version = "0.1.0"
 authors = ["Maxim Zhiburt <zhiburt@gmail.com>"]
 edition = "2018"
+description = "A library for cutting a string while preserving colors."
+repository = "https://github.com/zhiburt/ansi-cut"
+homepage = "https://github.com/zhiburt/ansi-cut"
+documentation = "https://docs.rs/ansi_cut"
+license = "MIT"
+readme = "README.md"
+keywords = ["ansi", "color"]
+categories = ["text-processing", "value-formatting"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
