@@ -20,11 +20,9 @@ where
 fn cut_str(string: &str, start: usize, end: usize) -> String {
     let parsed: Vec<Output> = string.ansi_parse().collect();
 
-    let mut start = start;
-    let mut end = end;
+    let mut index = start;
     let mut need = end - start;
     let mut buffer = String::with_capacity(start + end);
-    let mut index = 0;
     let mut escapes = Vec::new();
     for block in parsed.into_iter() {
         match block {
@@ -34,33 +32,26 @@ fn cut_str(string: &str, start: usize, end: usize) -> String {
                 }
 
                 let block_len = str_len(text);
-                let is_nesessary_block = start < block_len;
+                let is_nesessary_block = index < block_len;
                 if is_nesessary_block {
                     escapes
                         .iter()
                         .for_each(|esc: &AnsiSequence| buffer.push_str(esc.to_string().as_str()));
-                }
 
-                if is_nesessary_block {
-                    let lhs = start;
-                    let rhs = std::cmp::min(block_len, start + need);
+                    let taken_chars = std::cmp::min(need, block_len - index);
+                    let block = text.chars().skip(index).take(taken_chars);
 
-                    let block = text.chars().skip(lhs).take(rhs - lhs);
-
-                    start = 0;
                     buffer.extend(block);
-                    need -= rhs - lhs;
+
+                    need -= taken_chars;
+                    index = 0;
 
                     if escapes.is_empty() && need == 0 {
                         break;
                     }
+                } else {
+                    index -= block_len;
                 }
-
-                if !is_nesessary_block {
-                    start -= block_len;
-                }
-
-                index += block_len;
 
                 escapes.clear();
             }
