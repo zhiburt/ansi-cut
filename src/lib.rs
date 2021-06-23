@@ -56,16 +56,16 @@ fn cut_str(string: &str, start: usize, end: usize) -> String {
                 escapes.clear();
             }
             Output::Escape(seq) => {
-                if need == 0 {
-                    if let AnsiSequence::SetGraphicsMode(_) = seq {
-                        buffer.push_str(seq.to_string().as_str())
-                    }
-                } else {
-                    escapes.push(seq)
+                if let AnsiSequence::SetGraphicsMode(_) = seq {
+                    escapes.push(seq);
                 }
             }
         }
     }
+
+    escapes
+        .iter()
+        .for_each(|esc: &AnsiSequence| buffer.push_str(esc.to_string().as_str()));
 
     buffer
 }
