@@ -49,6 +49,25 @@ impl AnsiCut for String {
     }
 }
 
+pub fn chunks(s: &str, n: usize) -> Vec<String> {
+    assert!(n > 0);
+
+    let length = s.chars().count();
+    let mut acc = Vec::new();
+    let mut start_index = 0;
+    while start_index < length {
+        let part = s.cut(start_index..start_index + n);
+        start_index += n;
+        if str_len(&part) == 0 {
+            continue;
+        }
+
+        acc.push(part);
+    }
+
+    acc
+}
+
 fn cut<S, R>(string: S, bounds: R) -> String
 where
     S: AsRef<str>,
@@ -59,7 +78,7 @@ where
     let (start, end) = bounds_to_usize(bounds.start_bound(), bounds.end_bound(), string_width);
 
     assert!(start <= end);
-    assert!(end <= string_width);
+    // assert!(end <= string_width);
 
     cut_str(string, start, end)
 }
@@ -161,9 +180,8 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn panic_on_index_higher_then_length() {
-        cut("qwe", ..5);
+    fn dont_panic_on_index_higher_then_length() {
+        assert_eq!("som", cut("som", ..5));
     }
 
     #[test]
@@ -203,5 +221,72 @@ mod tests {
         assert_eq!("😅😂", cut("😀😃😄😁😆😅😂🤣🥲😊", 5..7));
         assert_eq!("😊", cut("😀😃😄😁😆😅😂🤣🥲😊", 9..));
         assert_eq!("🧑‍🏭", cut("🧑‍🏭🧑‍🏭🧑‍🏭", ..3));
+    }
+
+    #[test]
+    fn chunks_test() {
+        assert_eq!(
+            vec!["som".to_string(), "eth".to_string(), "ing".to_string()],
+            chunks("something", 3)
+        );
+        assert_eq!(
+            vec![
+                "so".to_string(),
+                "me".to_string(),
+                "th".to_string(),
+                "in".to_string(),
+                "g".to_string()
+            ],
+            chunks("something", 2)
+        );
+        assert_eq!(
+            vec!["a".to_string(), "b".to_string(), "c".to_string()],
+            chunks("abc", 1)
+        );
+        assert_eq!(vec!["something".to_string()], chunks("something", 99));
+    }
+
+    #[test]
+    #[should_panic]
+    fn chunks_panic_when_n_is_zero() {
+        chunks("something", 0);
+    }
+
+    #[test]
+    fn chunks_colored() {
+        let s = "something".fg::<Black>().bg::<Blue>().to_string();
+        assert_eq!(
+            vec![
+                "som".fg::<Black>().bg::<Blue>().to_string(),
+                "eth".fg::<Black>().bg::<Blue>().to_string(),
+                "ing".fg::<Black>().bg::<Blue>().to_string()
+            ],
+            chunks(&s, 3)
+        );
+        assert_eq!(
+            vec![
+                "so".fg::<Black>().bg::<Blue>().to_string(),
+                "me".fg::<Black>().bg::<Blue>().to_string(),
+                "th".fg::<Black>().bg::<Blue>().to_string(),
+                "in".fg::<Black>().bg::<Blue>().to_string(),
+                "g".fg::<Black>().bg::<Blue>().to_string()
+            ],
+            chunks(&s, 2)
+        );
+        assert_eq!(
+            vec![
+                "s".fg::<Black>().bg::<Blue>().to_string(),
+                "o".fg::<Black>().bg::<Blue>().to_string(),
+                "m".fg::<Black>().bg::<Blue>().to_string(),
+                "e".fg::<Black>().bg::<Blue>().to_string(),
+                "t".fg::<Black>().bg::<Blue>().to_string(),
+                "h".fg::<Black>().bg::<Blue>().to_string(),
+                "i".fg::<Black>().bg::<Blue>().to_string(),
+                "n".fg::<Black>().bg::<Blue>().to_string(),
+                "g".fg::<Black>().bg::<Blue>().to_string(),
+            ],
+            chunks(&s, 1)
+        );
+        assert_eq!(vec![s.clone()], chunks(&s, 99));
     }
 }
