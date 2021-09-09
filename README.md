@@ -3,7 +3,7 @@
 
 A library for cutting a string while preserving colors.
 
-## Example
+## Cut
 
 ```rust
 use ansi_cut::AnsiCut;
@@ -17,6 +17,21 @@ pub fn main() {
     let cutted_text = colored_text.cut(5..);
 
     println!("{}", cutted_text);
+}
+```
+
+## Chunks
+
+```rust
+use owo_colors::{colors::*, OwoColorize};
+
+pub fn main() {
+    let colored_text = "When the night has come"
+        .fg::<Black>()
+        .bg::<White>()
+        .to_string();
+
+    let chunks = ansi_cut::chunks(colored_text, 5);
 }
 ```
 
