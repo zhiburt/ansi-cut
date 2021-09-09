@@ -84,7 +84,7 @@ where
 }
 
 fn cut_str(string: &str, start: usize, end: usize) -> String {
-    let parsed: Vec<Output> = string.ansi_parse().collect();
+    let parsed = string.ansi_parse();
 
     let mut index = start;
     let mut need = end - start;
