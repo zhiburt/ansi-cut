@@ -26,7 +26,7 @@ use std::ops::{Bound, RangeBounds};
 /// about its color defined as ANSI control sequences.
 pub trait AnsiCut {
     /// Cut string from the beginning of the range to the end.
-    /// 
+    ///
     /// Range is defined in terms of `char`s of the string not containing ANSI
     /// control sequences.
     fn cut<R>(&self, range: R) -> String
@@ -93,7 +93,7 @@ fn cut_str(string: &str, start: usize, end: usize) -> String {
     let mut need = end - start;
     let mut buffer = String::with_capacity(start + end);
     let mut escapes = Vec::new();
-    for block in parsed.into_iter() {
+    for block in parsed {
         match block {
             Output::TextBlock(text) => {
                 if need == 0 {
