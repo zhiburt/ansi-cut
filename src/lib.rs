@@ -22,10 +22,13 @@ use ansi_parser::AnsiSequence;
 use ansi_parser::{AnsiParser, Output};
 use std::ops::{Bound, RangeBounds};
 
-/// AnsiCut a trait for a cut string while keeping information
-/// about its color
+/// AnsiCut a trait to cut a string while keeping information
+/// about its color defined as ANSI control sequences.
 pub trait AnsiCut {
-    /// Cut string from the begging of the range to the end
+    /// Cut string from the beginning of the range to the end.
+    ///
+    /// Range is defined in terms of `char`s of the string not containing ANSI
+    /// control sequences.
     fn cut<R>(&self, range: R) -> String
     where
         R: RangeBounds<usize>;
@@ -77,7 +80,7 @@ where
     let string_width = str_len(string);
     let (start, end) = bounds_to_usize(bounds.start_bound(), bounds.end_bound(), string_width);
 
-    assert!(start <= end);
+    assert!(start <= end, "Starting character index exceeds the last character index! Make sure to use character indices instead of byte indices!");
     // assert!(end <= string_width);
 
     cut_str(string, start, end)
@@ -90,7 +93,7 @@ fn cut_str(string: &str, start: usize, end: usize) -> String {
     let mut need = end - start;
     let mut buffer = String::with_capacity(start + end);
     let mut escapes = Vec::new();
-    for block in parsed.into_iter() {
+    for block in parsed {
         match block {
             Output::TextBlock(text) => {
                 if need == 0 {
