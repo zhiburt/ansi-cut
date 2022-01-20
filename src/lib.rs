@@ -182,7 +182,10 @@ fn update_ansi_state(state: &mut AnsiState, mode: &[u8]) {
         let tag = ptr[0];
 
         match tag {
-            0 => state.reset = true,
+            0 => {
+                *state = AnsiState::default();
+                state.reset = true;
+            }
             1 => state.bold = true,
             2 => state.faint = true,
             3 => state.italic = true,
@@ -335,6 +338,10 @@ fn complete_ansi_sequences(state: &AnsiState, buf: &mut String) {
         };
     }
 
+    if state.unknown && state.reset {
+        emit_static!("0");
+    }
+
     if state.font.is_some() {
         emit_static!("10");
     }
@@ -424,7 +431,6 @@ fn bounds_to_usize(left: Bound<&usize>, right: Bound<&usize>) -> (usize, Option<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use owo_colors::{colors::*, OwoColorize};
 
     fn srip_ansi_sequences(string: &str) -> String {
         let tokens = string.ansi_parse();
@@ -443,74 +449,174 @@ mod tests {
 
     #[test]
     fn parse_ansi_color_test() {
-        assert_eq!(
-            parse_ansi_color(&[b'2', b';', 200]).map(|a| a.0),
-            Some(AnsiColor::Bit8 { index: 200 })
-        );
-        assert_eq!(
-            parse_ansi_color(&[b'2', b';', 100, b';', 123, b';', 39]).map(|a| a.0),
-            Some(AnsiColor::Bit8 { index: 100 })
-        );
-        assert_eq!(
-            parse_ansi_color(&[b'5', b';', 100, b';', 123, b';', 39]).map(|a| a.0),
-            Some(AnsiColor::Bit24 {
-                r: 100,
-                g: 123,
-                b: 39
-            })
-        );
+        let tests: Vec<(&[u8], _)> = vec![
+            (&[b'2', b';', 200], Some(AnsiColor::Bit8 { index: 200 })),
+            (
+                &[b'2', b';', 100, b';', 123, b';', 39],
+                Some(AnsiColor::Bit8 { index: 100 }),
+            ),
+            (
+                &[b'2', b';', 100, 1, 2, 3],
+                Some(AnsiColor::Bit8 { index: 100 }),
+            ),
+            (&[b'2', b';'], None),
+            (&[b'2', 1, 2, 3], None),
+            (&[b'2'], None),
+            (
+                &[b'5', b';', 100, b';', 123, b';', 39],
+                Some(AnsiColor::Bit24 {
+                    r: 100,
+                    g: 123,
+                    b: 39,
+                }),
+            ),
+            (
+                &[b'5', b';', 100, b';', 123, b';', 39, 1, 2, 3],
+                Some(AnsiColor::Bit24 {
+                    r: 100,
+                    g: 123,
+                    b: 39,
+                }),
+            ),
+            (
+                &[b'5', b';', 100, b';', 123, b';', 39, 1, 2, 3],
+                Some(AnsiColor::Bit24 {
+                    r: 100,
+                    g: 123,
+                    b: 39,
+                }),
+            ),
+            (&[b'5', b';', 100, b';', 123, b';'], None),
+            (&[b'5', b';', 100, b';', 123], None),
+            (&[b'5', b';', 100, b';'], None),
+            (&[b'5', b';', 100], None),
+            (&[b'5', b';'], None),
+            (&[b'5'], None),
+            (&[], None),
+        ];
+
+        for (i, (bytes, expected)) in tests.into_iter().enumerate() {
+            assert_eq!(parse_ansi_color(bytes).map(|a| a.0), expected, "test={}", i);
+        }
     }
 
     #[test]
-    fn cut_with_multiply_words_str() {
-        let string = format!("{} {}", "Hello".fg::<Black>(), "World".fg::<Red>())
-            .bg::<Green>()
-            .to_string();
-        eprintln!("{}", string);
-        eprintln!("{}", cut(&string, 3..));
-        eprintln!("{}", cut(&string, 3..7));
+    fn cut_colored_fg_test() {
+        let colored_s = "\u{1b}[30mTEXT\u{1b}[39m";
+        assert_eq!(colored_s, cut(&colored_s, ..));
+        assert_eq!(colored_s, cut(&colored_s, 0..4));
+        assert_eq!("\u{1b}[30mEXT\u{1b}[39m", cut(&colored_s, 1..));
+        assert_eq!("\u{1b}[30mTEX\u{1b}[39m", cut(&colored_s, ..3));
+        assert_eq!("\u{1b}[30mEX\u{1b}[39m", cut(&colored_s, 1..3));
 
-        assert_eq!(string, cut(&string, ..));
-        assert_eq!("Hello World", srip_ansi_sequences(&cut(&string, ..)));
+        assert_eq!("TEXT", srip_ansi_sequences(&cut(&colored_s, ..)));
+        assert_eq!("TEX", srip_ansi_sequences(&cut(&colored_s, ..3)));
+        assert_eq!("EX", srip_ansi_sequences(&cut(&colored_s, 1..3)));
 
+        let colored_s = "\u{1b}[30mTEXT\u{1b}[39m \u{1b}[31mTEXT\u{1b}[39m";
+        assert_eq!(colored_s, cut(&colored_s, ..));
+        assert_eq!(colored_s, cut(&colored_s, 0..9));
         assert_eq!(
-            format!("{} {}", "lo".fg::<Black>(), "World".fg::<Red>())
-                .bg::<Green>()
-                .to_string(),
-            cut(&string, 3..)
+            "\u{1b}[30mXT\u{1b}[39m \u{1b}[31mTEXT\u{1b}[39m",
+            cut(&colored_s, 2..)
         );
-        assert_eq!("lo World", srip_ansi_sequences(&cut(&string, 3..)));
-
         assert_eq!(
-            format!("{} {}", "lo".fg::<Black>(), "W".fg::<Red>())
-                .bg::<Green>()
-                .to_string(),
-            cut(&string, 3..7)
+            "\u{1b}[30mTEXT\u{1b}[39m \u{1b}[31mT\u{1b}[39m",
+            cut(&colored_s, ..6)
         );
-        assert_eq!("lo W", srip_ansi_sequences(&cut(&string, 3..7)));
-        // eprintln!(
-        //     "{}",
-        //     cut(
-        //         &string,
-        //         string.find("lo").unwrap()..string.find("lo").unwrap() + 2
-        //     )
-        // );
-        // eprintln!("{:?}", cut(&string, string.find("lo").unwrap()..7));
-        // eprintln!("{}", cut(&string, string.find("World").unwrap()..));
-        // assert_eq!(
-        //     cut(&string, string.find("Hello").unwrap() + 4..),
-        //     format!("{} {}", "o".fg::<Black>(), "World".fg::<Red>())
-        //         .bg::<Green>()
-        //         .to_string()
-        // );
-        // assert_eq!(
-        //     cut(&string, string.find("Hello").unwrap()..5),
-        //     "Hello".fg::<Black>().bg::<Green>().to_string()
-        // );
+        assert_eq!(
+            "\u{1b}[30mXT\u{1b}[39m \u{1b}[31mT\u{1b}[39m",
+            cut(&colored_s, 2..6)
+        );
+
+        assert_eq!("TEXT TEXT", srip_ansi_sequences(&cut(&colored_s, ..)));
+        assert_eq!("TEXT T", srip_ansi_sequences(&cut(&colored_s, ..6)));
+        assert_eq!("XT T", srip_ansi_sequences(&cut(&colored_s, 2..6)));
+
+        assert_eq!("\u{1b}[30m\u{1b}[39m", cut("\u{1b}[30m\u{1b}[39m", ..));
     }
 
     #[test]
-    fn cut_str() {
+    fn cut_colored_bg_test() {
+        let colored_s = "\u{1b}[40mTEXT\u{1b}[49m";
+        assert_eq!(colored_s, cut(&colored_s, ..));
+        assert_eq!(colored_s, cut(&colored_s, 0..4));
+        assert_eq!("\u{1b}[40mEXT\u{1b}[49m", cut(&colored_s, 1..));
+        assert_eq!("\u{1b}[40mTEX\u{1b}[49m", cut(&colored_s, ..3));
+        assert_eq!("\u{1b}[40mEX\u{1b}[49m", cut(&colored_s, 1..3));
+
+        // todo: determine if this is the right behaviour
+        assert_eq!("\u{1b}[40m\u{1b}[49m", cut(&colored_s, 3..3));
+
+        assert_eq!("TEXT", srip_ansi_sequences(&cut(&colored_s, ..)));
+        assert_eq!("TEX", srip_ansi_sequences(&cut(&colored_s, ..3)));
+        assert_eq!("EX", srip_ansi_sequences(&cut(&colored_s, 1..3)));
+
+        let colored_s = "\u{1b}[40mTEXT\u{1b}[49m \u{1b}[41mTEXT\u{1b}[49m";
+        assert_eq!(colored_s, cut(&colored_s, ..));
+        assert_eq!(colored_s, cut(&colored_s, 0..9));
+        assert_eq!(
+            "\u{1b}[40mXT\u{1b}[49m \u{1b}[41mTEXT\u{1b}[49m",
+            cut(&colored_s, 2..)
+        );
+        assert_eq!(
+            "\u{1b}[40mTEXT\u{1b}[49m \u{1b}[41mT\u{1b}[49m",
+            cut(&colored_s, ..6)
+        );
+        assert_eq!(
+            "\u{1b}[40mXT\u{1b}[49m \u{1b}[41mT\u{1b}[49m",
+            cut(&colored_s, 2..6)
+        );
+
+        assert_eq!("TEXT TEXT", srip_ansi_sequences(&cut(&colored_s, ..)));
+        assert_eq!("TEXT T", srip_ansi_sequences(&cut(&colored_s, ..6)));
+        assert_eq!("XT T", srip_ansi_sequences(&cut(&colored_s, 2..6)));
+
+        assert_eq!("\u{1b}[40m\u{1b}[49m", cut("\u{1b}[40m\u{1b}[49m", ..));
+    }
+
+    #[test]
+    fn cut_colored_bg_fg_test() {
+        let colored_s = "\u{1b}[31;40mTEXT\u{1b}[0m";
+        assert_eq!(colored_s, cut(&colored_s, ..));
+        assert_eq!(colored_s, cut(&colored_s, 0..4));
+        assert_eq!("\u{1b}[31;40mEXT\u{1b}[0m", cut(&colored_s, 1..));
+        assert_eq!("\u{1b}[31;40mTEX\u{1b}[39m\u{1b}[49m", cut(&colored_s, ..3));
+        assert_eq!("\u{1b}[31;40mEX\u{1b}[39m\u{1b}[49m", cut(&colored_s, 1..3));
+
+        assert_eq!("TEXT", srip_ansi_sequences(&cut(&colored_s, ..)));
+        assert_eq!("TEX", srip_ansi_sequences(&cut(&colored_s, ..3)));
+        assert_eq!("EX", srip_ansi_sequences(&cut(&colored_s, 1..3)));
+
+        let colored_s = "\u{1b}[31;40mTEXT\u{1b}[0m \u{1b}[34;42mTEXT\u{1b}[0m";
+        assert_eq!(colored_s, cut(&colored_s, ..));
+        assert_eq!(colored_s, cut(&colored_s, 0..9));
+        assert_eq!(
+            "\u{1b}[31;40mXT\u{1b}[0m \u{1b}[34;42mTEXT\u{1b}[0m",
+            cut(&colored_s, 2..)
+        );
+        assert_eq!(
+            "\u{1b}[31;40mTEXT\u{1b}[0m \u{1b}[34;42mT\u{1b}[39m\u{1b}[49m",
+            cut(&colored_s, ..6)
+        );
+        assert_eq!(
+            "\u{1b}[31;40mXT\u{1b}[0m \u{1b}[34;42mT\u{1b}[39m\u{1b}[49m",
+            cut(&colored_s, 2..6)
+        );
+
+        assert_eq!("TEXT TEXT", srip_ansi_sequences(&cut(&colored_s, ..)));
+        assert_eq!("TEXT T", srip_ansi_sequences(&cut(&colored_s, ..6)));
+        assert_eq!("XT T", srip_ansi_sequences(&cut(&colored_s, 2..6)));
+
+        assert_eq!("\u{1b}[40m\u{1b}[49m", cut("\u{1b}[40m\u{1b}[49m", ..));
+    }
+
+    #[test]
+    fn cut_colored_test() {}
+
+    #[test]
+    fn cut_no_colored_str() {
+        assert_eq!("something", cut("something", ..));
         assert_eq!("som", cut("something", ..3));
         assert_eq!("some", cut("something", ..=3));
         assert_eq!("et", cut("something", 3..5));
@@ -520,16 +626,40 @@ mod tests {
         assert_eq!("", cut("", ..));
     }
 
+    #[test]
+    fn dont_panic_on_exceeding_upper_bound() {
+        assert_eq!("TEXT", cut("TEXT", ..50));
+        assert_eq!("EXT", cut("TEXT", 1..50));
+        assert_eq!(
+            "\u{1b}[31;40mTEXT\u{1b}[0m",
+            cut("\u{1b}[31;40mTEXT\u{1b}[0m", ..50)
+        );
+        assert_eq!(
+            "\u{1b}[31;40mEXT\u{1b}[0m",
+            cut("\u{1b}[31;40mTEXT\u{1b}[0m", 1..50)
+        );
+    }
+
+    #[test]
+    fn dont_panic_on_exceeding_lower_bound() {
+        assert_eq!("", cut("TEXT", 10..));
+        assert_eq!("", cut("TEXT", 10..50));
+    }
+
     // #[test]
-    // #[should_panic]
-    // fn panic_on_exceeding_upper_bound() {
-    //     assert_eq!("som", cut("som", ..5));
+    // #[should_panic = "Panics if mid is not on a UTF-8 code point boundary"]
+    // fn cut_not__test() {
+    //     // here's must be a panic
+    //     // But in such case we can' use it in `chunks` we need to check if the targeted char is not wide.
+    //     println!("{:?}", cut("😀", ..1).as_bytes());
     // }
 
     // #[test]
-    // #[should_panic]
-    // fn panic_on_exceeding_lower_bound() {
-    //     assert_eq!("som", cut("som", 5..));
+    // fn cut_emojies_test() {
+    //     // assert_eq!("😀😃😄", cut("😀😃😄😁😆😅😂🤣🥲😊", ..3));
+    //     assert_eq!("😅😂", cut("😀😃😄😁😆😅😂🤣🥲😊", 5..7));
+    //     assert_eq!("😊", cut("😀😃😄😁😆😅😂🤣🥲😊", 9..));
+    //     assert_eq!("🧑‍🏭", cut("🧑‍🏭🧑‍🏭🧑‍🏭", ..3));
     // }
 
     // #[test]
@@ -561,14 +691,6 @@ mod tests {
     //         format!("{}_qwe", "g".fg::<Black>().bg::<Blue>()),
     //         cut(&s, 12..)
     //     );
-    // }
-
-    // #[test]
-    // fn cut_emojies() {
-    //     assert_eq!("😀😃😄", cut("😀😃😄😁😆😅😂🤣🥲😊", ..3));
-    //     assert_eq!("😅😂", cut("😀😃😄😁😆😅😂🤣🥲😊", 5..7));
-    //     assert_eq!("😊", cut("😀😃😄😁😆😅😂🤣🥲😊", 9..));
-    //     assert_eq!("🧑‍🏭", cut("🧑‍🏭🧑‍🏭🧑‍🏭", ..3));
     // }
 
     // #[test]
