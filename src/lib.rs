@@ -133,81 +133,43 @@ fn cut_str(string: &str, lower_bound: usize, upper_bound: Option<usize>) -> Stri
     buf
 }
 
-fn complete_ansi_sequences(state: &AnsiState, buf: &mut String) {
-    macro_rules! emit_static {
-        ($s:expr) => {
-            buf.push_str(concat!("\u{1b}[", $s, "m"))
-        };
-    }
+#[derive(Debug, Clone, Default)]
+struct AnsiState {
+    fg_color: Option<AnsiColor>,
+    bg_color: Option<AnsiColor>,
+    undr_color: Option<AnsiColor>,
+    bold: bool,
+    faint: bool,
+    italic: bool,
+    underline: bool,
+    double_underline: bool,
+    slow_blink: bool,
+    rapid_blink: bool,
+    inverse: bool,
+    hide: bool,
+    crossedout: bool,
+    reset: bool,
+    framed: bool,
+    encircled: bool,
+    font: Option<u8>,
+    fraktur: bool,
+    proportional_spacing: bool,
+    overlined: bool,
+    igrm_underline: bool,
+    igrm_double_underline: bool,
+    igrm_overline: bool,
+    igrm_double_overline: bool,
+    igrm_stress_marking: bool,
+    superscript: bool,
+    subscript: bool,
+    unknown: bool,
+}
 
-    if state.font.is_some() {
-        emit_static!("10");
-    }
-
-    if state.bold || state.faint {
-        emit_static!("22");
-    }
-
-    if state.italic {
-        emit_static!("23");
-    }
-
-    if state.underline || state.double_underline {
-        emit_static!("24");
-    }
-
-    if state.slow_blink || state.rapid_blink {
-        emit_static!("25");
-    }
-
-    if state.inverse {
-        emit_static!("28");
-    }
-
-    if state.crossedout {
-        emit_static!("29");
-    }
-
-    if state.fg_color.is_some() {
-        emit_static!("39");
-    }
-
-    if state.bg_color.is_some() {
-        emit_static!("49");
-    }
-
-    if state.proportional_spacing {
-        emit_static!("50");
-    }
-
-    if state.encircled || state.framed {
-        emit_static!("54");
-    }
-
-    if state.overlined {
-        emit_static!("55");
-    }
-
-    if state.igrm_underline
-        || state.igrm_double_underline
-        || state.igrm_overline
-        || state.igrm_double_overline
-        || state.igrm_stress_marking
-    {
-        emit_static!("65");
-    }
-
-    if state.undr_color.is_some() {
-        emit_static!("59");
-    }
-
-    if state.subscript || state.superscript {
-        emit_static!("75");
-    }
-
-    if state.unknown {
-        emit_static!("0");
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum AnsiColor {
+    Bit4 { index: u8 },
+    Bit8 { index: u8 },
+    Bit24 { r: u8, g: u8, b: u8 },
 }
 
 fn update_ansi_state(state: &mut AnsiState, mode: &[u8]) {
@@ -351,49 +313,6 @@ fn update_ansi_state(state: &mut AnsiState, mode: &[u8]) {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-struct AnsiState {
-    fg_color: Option<AnsiColor>,
-    bg_color: Option<AnsiColor>,
-    undr_color: Option<AnsiColor>,
-    bold: bool,
-    faint: bool,
-    italic: bool,
-    underline: bool,
-    double_underline: bool,
-    slow_blink: bool,
-    rapid_blink: bool,
-    inverse: bool,
-    hide: bool,
-    crossedout: bool,
-    reset: bool,
-    framed: bool,
-    encircled: bool,
-    font: Option<u8>,
-    fraktur: bool,
-    proportional_spacing: bool,
-    overlined: bool,
-    igrm_underline: bool,
-    igrm_double_underline: bool,
-    igrm_overline: bool,
-    igrm_double_overline: bool,
-    igrm_stress_marking: bool,
-    superscript: bool,
-    subscript: bool,
-    unknown: bool,
-}
-
-/* 0 is off
-* 30-37, 40-47, 90-97, 100-107
-* CLI_COL_256 (254) is 8 bit
-* CLI_COL_RGB (255) is 24 bit */
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum AnsiColor {
-    Bit4 { index: u8 },
-    Bit8 { index: u8 },
-    Bit24 { r: u8, g: u8, b: u8 },
-}
-
 fn parse_ansi_color(buf: &[u8]) -> Option<(AnsiColor, usize)> {
     match buf {
         [b'2', b';', index, ..] => Some((AnsiColor::Bit8 { index: *index }, 3)),
@@ -409,19 +328,81 @@ fn parse_ansi_color(buf: &[u8]) -> Option<(AnsiColor, usize)> {
     }
 }
 
-fn srip_ansi_sequences(string: &str) -> String {
-    let tokens = string.ansi_parse();
-    let mut buf = String::new();
-    for token in tokens {
-        match token {
-            Output::TextBlock(text) => {
-                buf.push_str(text);
-            }
-            Output::Escape(_) => {}
-        }
+fn complete_ansi_sequences(state: &AnsiState, buf: &mut String) {
+    macro_rules! emit_static {
+        ($s:expr) => {
+            buf.push_str(concat!("\u{1b}[", $s, "m"))
+        };
     }
 
-    buf
+    if state.font.is_some() {
+        emit_static!("10");
+    }
+
+    if state.bold || state.faint {
+        emit_static!("22");
+    }
+
+    if state.italic {
+        emit_static!("23");
+    }
+
+    if state.underline || state.double_underline {
+        emit_static!("24");
+    }
+
+    if state.slow_blink || state.rapid_blink {
+        emit_static!("25");
+    }
+
+    if state.inverse {
+        emit_static!("28");
+    }
+
+    if state.crossedout {
+        emit_static!("29");
+    }
+
+    if state.fg_color.is_some() {
+        emit_static!("39");
+    }
+
+    if state.bg_color.is_some() {
+        emit_static!("49");
+    }
+
+    if state.proportional_spacing {
+        emit_static!("50");
+    }
+
+    if state.encircled || state.framed {
+        emit_static!("54");
+    }
+
+    if state.overlined {
+        emit_static!("55");
+    }
+
+    if state.igrm_underline
+        || state.igrm_double_underline
+        || state.igrm_overline
+        || state.igrm_double_overline
+        || state.igrm_stress_marking
+    {
+        emit_static!("65");
+    }
+
+    if state.undr_color.is_some() {
+        emit_static!("59");
+    }
+
+    if state.subscript || state.superscript {
+        emit_static!("75");
+    }
+
+    if state.unknown {
+        emit_static!("0");
+    }
 }
 
 fn bounds_to_usize(left: Bound<&usize>, right: Bound<&usize>) -> (usize, Option<usize>) {
@@ -444,6 +425,21 @@ fn bounds_to_usize(left: Bound<&usize>, right: Bound<&usize>) -> (usize, Option<
 mod tests {
     use super::*;
     use owo_colors::{colors::*, OwoColorize};
+
+    fn srip_ansi_sequences(string: &str) -> String {
+        let tokens = string.ansi_parse();
+        let mut buf = String::new();
+        for token in tokens {
+            match token {
+                Output::TextBlock(text) => {
+                    buf.push_str(text);
+                }
+                Output::Escape(_) => {}
+            }
+        }
+
+        buf
+    }
 
     #[test]
     fn parse_ansi_color_test() {
