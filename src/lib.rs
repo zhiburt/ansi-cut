@@ -672,7 +672,13 @@ mod tests {
     }
 
     #[test]
-    fn cut_colored_test() {}
+    fn cut_keep_general_color_test() {
+        assert_eq!(
+            "\u{1b}[41m\u{1b}[30m\u{1b}[39m \u{1b}[34m12\u{1b}[39m\u{1b}[49m",
+            "\u{1b}[41m\u{1b}[30msomething\u{1b}[39m \u{1b}[34m123123\u{1b}[39m\u{1b}[49m"
+                .cut(9..12)
+        );
+    }
 
     #[test]
     fn cut_no_colored_str() {
