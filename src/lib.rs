@@ -36,6 +36,10 @@ pub trait AnsiCut {
     ///
     /// Range is defined in terms of `char`s of the string not containing ANSI
     /// control sequences.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a start or end indexes are not on a UTF-8 code point boundary.
     fn cut<R>(&self, range: R) -> String
     where
         R: RangeBounds<usize>;
@@ -97,25 +101,54 @@ where
 fn cut_str(string: &str, lower_bound: usize, upper_bound: Option<usize>) -> String {
     let mut asci_state = AnsiState::default();
     let tokens = string.ansi_parse();
-    let mut index = 0;
     let mut buf = String::new();
+    let mut index = 0;
 
     '_tokens_loop: for token in tokens {
         match token {
             Output::TextBlock(text) => {
-                for (i, c) in text.char_indices() {
-                    if index + i >= lower_bound {
-                        if let Some(upper_bound) = upper_bound {
-                            if index + i >= upper_bound {
-                                break '_tokens_loop;
-                            }
-                        }
+                let block_end_index = index + text.len();
+                println!(
+                    "lower_bound={} upper_bound={:?} index={} text.len()={}",
+                    lower_bound,
+                    upper_bound,
+                    index,
+                    text.len()
+                );
+                if lower_bound > block_end_index {
+                    index += text.len();
+                    continue;
+                };
 
-                        buf.push(c);
+                let mut start = 0;
+                if lower_bound > index {
+                    start = lower_bound - index;
+                }
+
+                let mut end = text.len();
+                let mut done = false;
+                if let Some(upper_bound) = upper_bound {
+                    if upper_bound > index && upper_bound < block_end_index {
+                        end = upper_bound - index;
+                        done = true;
                     }
                 }
 
+                println!("start={} end={}", start, end);
+
                 index += text.len();
+
+                match text.get(start..end) {
+                    Some(text) => {
+                        buf.push_str(text);
+                        if done {
+                            break '_tokens_loop;
+                        }
+                    }
+                    None => {
+                        panic!("One of indexes are not on a UTF-8 code point boundary");
+                    }
+                }
             }
             Output::Escape(seq) => {
                 let seq_str = seq.to_string();
@@ -646,21 +679,32 @@ mod tests {
         assert_eq!("", cut("TEXT", 10..50));
     }
 
-    // #[test]
-    // #[should_panic = "Panics if mid is not on a UTF-8 code point boundary"]
-    // fn cut_not__test() {
-    //     // here's must be a panic
-    //     // But in such case we can' use it in `chunks` we need to check if the targeted char is not wide.
-    //     println!("{:?}", cut("😀", ..1).as_bytes());
-    // }
+    #[test]
+    #[should_panic = "One of indexes are not on a UTF-8 code point boundary"]
+    fn cut_a_mid_of_emojie_2_test() {
+        cut("😀", 1..2);
+    }
 
-    // #[test]
-    // fn cut_emojies_test() {
-    //     // assert_eq!("😀😃😄", cut("😀😃😄😁😆😅😂🤣🥲😊", ..3));
-    //     assert_eq!("😅😂", cut("😀😃😄😁😆😅😂🤣🥲😊", 5..7));
-    //     assert_eq!("😊", cut("😀😃😄😁😆😅😂🤣🥲😊", 9..));
-    //     assert_eq!("🧑‍🏭", cut("🧑‍🏭🧑‍🏭🧑‍🏭", ..3));
-    // }
+    #[test]
+    #[should_panic = "One of indexes are not on a UTF-8 code point boundary"]
+    fn cut_a_mid_of_emojie_1_test() {
+        cut("😀", 1..);
+    }
+
+    #[test]
+    #[should_panic = "One of indexes are not on a UTF-8 code point boundary"]
+    fn cut_a_mid_of_emojie_0_test() {
+        cut("😀", ..1);
+    }
+
+    #[test]
+    fn cut_emojies_test() {
+        let emojes = "😀😃😄😁😆😅😂🤣🥲😊";
+        assert_eq!(emojes, cut(emojes, ..));
+        assert_eq!("😀", cut(emojes, ..4));
+        assert_eq!("😃😄", cut(emojes, 4..12));
+        assert_eq!("🤣🥲😊", cut(emojes, emojes.find('🤣').unwrap()..));
+    }
 
     // #[test]
     // fn cut_colored_str() {
@@ -716,11 +760,11 @@ mod tests {
     //     assert_eq!(vec!["something".to_string()], chunks("something", 99));
     // }
 
-    // #[test]
-    // #[should_panic]
-    // fn chunks_panic_when_n_is_zero() {
-    //     chunks("something", 0);
-    // }
+    #[test]
+    #[should_panic]
+    fn chunks_panic_when_n_is_zero() {
+        chunks("something", 0);
+    }
 
     // #[test]
     // fn chunks_colored() {
