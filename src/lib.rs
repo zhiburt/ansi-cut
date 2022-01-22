@@ -76,18 +76,52 @@ impl AnsiCut for String {
     }
 }
 
-// Make it to return an Iterator
-// Move it to the trait
-pub fn chunks(s: &str, n: usize) -> Vec<String> {
-    assert!(n > 0);
+/// Returns an Vec over chunk_size elements of string, starting at the beginning of the slice.
+/// It uses chars but not bytes!
+///
+/// The chunks are vectors and do not overlap.
+/// If chunk_size does not divide the length of the slice, then the last chunk will not have length chunk_size.
+///
+/// # Panics
+///
+/// Panics if chunk_size is 0.
+///
+/// # Examples
+///
+/// ```rust
+/// use owo_colors::{OwoColorize, colors::*};
+/// let colored_text = format!("{} {} {}", "A".fg::<Black>(), "Colored".fg::<Red>(), "Text".fg::<Blue>()).bg::<Yellow>().to_string();
+/// let chunks = ansi_cut::chunks(&colored_text, 3);
+/// for chunk in &chunks {
+///     println!("{}", chunk);
+/// }
+/// ```
+pub fn chunks(s: &str, chunk_size: usize) -> Vec<String> {
+    assert!(chunk_size > 0);
 
+    let stripped = srip_ansi_sequences(s);
+    let count_chars = stripped.chars().count();
     let mut chunks = Vec::new();
-    let length = s.chars().count();
-    let mut start_index = 0;
-    while start_index < length {
-        let end_index = std::cmp::min(start_index + n, length);
-        let part = s.cut(start_index..end_index);
-        start_index = end_index;
+    let mut start_pos = 0;
+
+    while start_pos < count_chars {
+        let start = stripped
+            .chars()
+            .map(|c| c.len_utf8())
+            .take(start_pos)
+            .sum::<usize>();
+        let end_pos = std::cmp::min(start_pos + chunk_size, count_chars);
+        let end = stripped
+            .chars()
+            .map(|c| c.len_utf8())
+            .take(end_pos)
+            .sum::<usize>();
+        let part = s.cut(start..end);
+        start_pos = end_pos;
+
+        if part.is_empty() {
+            break;
+        }
 
         chunks.push(part);
     }
@@ -461,24 +495,24 @@ fn bounds_to_usize(left: Bound<&usize>, right: Bound<&usize>) -> (usize, Option<
     }
 }
 
+fn srip_ansi_sequences(string: &str) -> String {
+    let tokens = string.ansi_parse();
+    let mut buf = String::new();
+    for token in tokens {
+        match token {
+            Output::TextBlock(text) => {
+                buf.push_str(text);
+            }
+            Output::Escape(_) => {}
+        }
+    }
+
+    buf
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn srip_ansi_sequences(string: &str) -> String {
-        let tokens = string.ansi_parse();
-        let mut buf = String::new();
-        for token in tokens {
-            match token {
-                Output::TextBlock(text) => {
-                    buf.push_str(text);
-                }
-                Output::Escape(_) => {}
-            }
-        }
-
-        buf
-    }
 
     #[test]
     fn parse_ansi_color_test() {
@@ -536,35 +570,35 @@ mod tests {
     #[test]
     fn cut_colored_fg_test() {
         let colored_s = "\u{1b}[30mTEXT\u{1b}[39m";
-        assert_eq!(colored_s, cut(&colored_s, ..));
-        assert_eq!(colored_s, cut(&colored_s, 0..4));
-        assert_eq!("\u{1b}[30mEXT\u{1b}[39m", cut(&colored_s, 1..));
-        assert_eq!("\u{1b}[30mTEX\u{1b}[39m", cut(&colored_s, ..3));
-        assert_eq!("\u{1b}[30mEX\u{1b}[39m", cut(&colored_s, 1..3));
+        assert_eq!(colored_s, colored_s.cut(..));
+        assert_eq!(colored_s, colored_s.cut(0..4));
+        assert_eq!("\u{1b}[30mEXT\u{1b}[39m", colored_s.cut(1..));
+        assert_eq!("\u{1b}[30mTEX\u{1b}[39m", colored_s.cut(..3));
+        assert_eq!("\u{1b}[30mEX\u{1b}[39m", colored_s.cut(1..3));
 
-        assert_eq!("TEXT", srip_ansi_sequences(&cut(&colored_s, ..)));
-        assert_eq!("TEX", srip_ansi_sequences(&cut(&colored_s, ..3)));
-        assert_eq!("EX", srip_ansi_sequences(&cut(&colored_s, 1..3)));
+        assert_eq!("TEXT", srip_ansi_sequences(&colored_s.cut(..)));
+        assert_eq!("TEX", srip_ansi_sequences(&colored_s.cut(..3)));
+        assert_eq!("EX", srip_ansi_sequences(&colored_s.cut(1..3)));
 
         let colored_s = "\u{1b}[30mTEXT\u{1b}[39m \u{1b}[31mTEXT\u{1b}[39m";
-        assert_eq!(colored_s, cut(&colored_s, ..));
-        assert_eq!(colored_s, cut(&colored_s, 0..9));
+        assert_eq!(colored_s, colored_s.cut(..));
+        assert_eq!(colored_s, colored_s.cut(0..9));
         assert_eq!(
             "\u{1b}[30mXT\u{1b}[39m \u{1b}[31mTEXT\u{1b}[39m",
-            cut(&colored_s, 2..)
+            colored_s.cut(2..)
         );
         assert_eq!(
             "\u{1b}[30mTEXT\u{1b}[39m \u{1b}[31mT\u{1b}[39m",
-            cut(&colored_s, ..6)
+            colored_s.cut(..6)
         );
         assert_eq!(
             "\u{1b}[30mXT\u{1b}[39m \u{1b}[31mT\u{1b}[39m",
-            cut(&colored_s, 2..6)
+            colored_s.cut(2..6)
         );
 
-        assert_eq!("TEXT TEXT", srip_ansi_sequences(&cut(&colored_s, ..)));
-        assert_eq!("TEXT T", srip_ansi_sequences(&cut(&colored_s, ..6)));
-        assert_eq!("XT T", srip_ansi_sequences(&cut(&colored_s, 2..6)));
+        assert_eq!("TEXT TEXT", srip_ansi_sequences(&colored_s.cut(..)));
+        assert_eq!("TEXT T", srip_ansi_sequences(&colored_s.cut(..6)));
+        assert_eq!("XT T", srip_ansi_sequences(&colored_s.cut(2..6)));
 
         assert_eq!("\u{1b}[30m\u{1b}[39m", cut("\u{1b}[30m\u{1b}[39m", ..));
     }
@@ -572,38 +606,38 @@ mod tests {
     #[test]
     fn cut_colored_bg_test() {
         let colored_s = "\u{1b}[40mTEXT\u{1b}[49m";
-        assert_eq!(colored_s, cut(&colored_s, ..));
-        assert_eq!(colored_s, cut(&colored_s, 0..4));
-        assert_eq!("\u{1b}[40mEXT\u{1b}[49m", cut(&colored_s, 1..));
-        assert_eq!("\u{1b}[40mTEX\u{1b}[49m", cut(&colored_s, ..3));
-        assert_eq!("\u{1b}[40mEX\u{1b}[49m", cut(&colored_s, 1..3));
+        assert_eq!(colored_s, colored_s.cut(..));
+        assert_eq!(colored_s, colored_s.cut(0..4));
+        assert_eq!("\u{1b}[40mEXT\u{1b}[49m", colored_s.cut(1..));
+        assert_eq!("\u{1b}[40mTEX\u{1b}[49m", colored_s.cut(..3));
+        assert_eq!("\u{1b}[40mEX\u{1b}[49m", colored_s.cut(1..3));
 
         // todo: determine if this is the right behaviour
-        assert_eq!("\u{1b}[40m\u{1b}[49m", cut(&colored_s, 3..3));
+        assert_eq!("\u{1b}[40m\u{1b}[49m", colored_s.cut(3..3));
 
-        assert_eq!("TEXT", srip_ansi_sequences(&cut(&colored_s, ..)));
-        assert_eq!("TEX", srip_ansi_sequences(&cut(&colored_s, ..3)));
-        assert_eq!("EX", srip_ansi_sequences(&cut(&colored_s, 1..3)));
+        assert_eq!("TEXT", srip_ansi_sequences(&colored_s.cut(..)));
+        assert_eq!("TEX", srip_ansi_sequences(&colored_s.cut(..3)));
+        assert_eq!("EX", srip_ansi_sequences(&colored_s.cut(1..3)));
 
         let colored_s = "\u{1b}[40mTEXT\u{1b}[49m \u{1b}[41mTEXT\u{1b}[49m";
-        assert_eq!(colored_s, cut(&colored_s, ..));
-        assert_eq!(colored_s, cut(&colored_s, 0..9));
+        assert_eq!(colored_s, colored_s.cut(..));
+        assert_eq!(colored_s, colored_s.cut(0..9));
         assert_eq!(
             "\u{1b}[40mXT\u{1b}[49m \u{1b}[41mTEXT\u{1b}[49m",
-            cut(&colored_s, 2..)
+            colored_s.cut(2..)
         );
         assert_eq!(
             "\u{1b}[40mTEXT\u{1b}[49m \u{1b}[41mT\u{1b}[49m",
-            cut(&colored_s, ..6)
+            colored_s.cut(..6)
         );
         assert_eq!(
             "\u{1b}[40mXT\u{1b}[49m \u{1b}[41mT\u{1b}[49m",
-            cut(&colored_s, 2..6)
+            colored_s.cut(2..6)
         );
 
-        assert_eq!("TEXT TEXT", srip_ansi_sequences(&cut(&colored_s, ..)));
-        assert_eq!("TEXT T", srip_ansi_sequences(&cut(&colored_s, ..6)));
-        assert_eq!("XT T", srip_ansi_sequences(&cut(&colored_s, 2..6)));
+        assert_eq!("TEXT TEXT", srip_ansi_sequences(&colored_s.cut(..)));
+        assert_eq!("TEXT T", srip_ansi_sequences(&colored_s.cut(..6)));
+        assert_eq!("XT T", srip_ansi_sequences(&colored_s.cut(2..6)));
 
         assert_eq!("\u{1b}[40m\u{1b}[49m", cut("\u{1b}[40m\u{1b}[49m", ..));
     }
@@ -611,35 +645,35 @@ mod tests {
     #[test]
     fn cut_colored_bg_fg_test() {
         let colored_s = "\u{1b}[31;40mTEXT\u{1b}[0m";
-        assert_eq!(colored_s, cut(&colored_s, ..));
-        assert_eq!(colored_s, cut(&colored_s, 0..4));
-        assert_eq!("\u{1b}[31;40mEXT\u{1b}[0m", cut(&colored_s, 1..));
-        assert_eq!("\u{1b}[31;40mTEX\u{1b}[39m\u{1b}[49m", cut(&colored_s, ..3));
-        assert_eq!("\u{1b}[31;40mEX\u{1b}[39m\u{1b}[49m", cut(&colored_s, 1..3));
+        assert_eq!(colored_s, colored_s.cut(..));
+        assert_eq!(colored_s, colored_s.cut(0..4));
+        assert_eq!("\u{1b}[31;40mEXT\u{1b}[0m", colored_s.cut(1..));
+        assert_eq!("\u{1b}[31;40mTEX\u{1b}[39m\u{1b}[49m", colored_s.cut(..3));
+        assert_eq!("\u{1b}[31;40mEX\u{1b}[39m\u{1b}[49m", colored_s.cut(1..3));
 
-        assert_eq!("TEXT", srip_ansi_sequences(&cut(&colored_s, ..)));
-        assert_eq!("TEX", srip_ansi_sequences(&cut(&colored_s, ..3)));
-        assert_eq!("EX", srip_ansi_sequences(&cut(&colored_s, 1..3)));
+        assert_eq!("TEXT", srip_ansi_sequences(&colored_s.cut(..)));
+        assert_eq!("TEX", srip_ansi_sequences(&colored_s.cut(..3)));
+        assert_eq!("EX", srip_ansi_sequences(&colored_s.cut(1..3)));
 
         let colored_s = "\u{1b}[31;40mTEXT\u{1b}[0m \u{1b}[34;42mTEXT\u{1b}[0m";
-        assert_eq!(colored_s, cut(&colored_s, ..));
-        assert_eq!(colored_s, cut(&colored_s, 0..9));
+        assert_eq!(colored_s, colored_s.cut(..));
+        assert_eq!(colored_s, colored_s.cut(0..9));
         assert_eq!(
             "\u{1b}[31;40mXT\u{1b}[0m \u{1b}[34;42mTEXT\u{1b}[0m",
-            cut(&colored_s, 2..)
+            colored_s.cut(2..)
         );
         assert_eq!(
             "\u{1b}[31;40mTEXT\u{1b}[0m \u{1b}[34;42mT\u{1b}[39m\u{1b}[49m",
-            cut(&colored_s, ..6)
+            colored_s.cut(..6)
         );
         assert_eq!(
             "\u{1b}[31;40mXT\u{1b}[0m \u{1b}[34;42mT\u{1b}[39m\u{1b}[49m",
-            cut(&colored_s, 2..6)
+            colored_s.cut(2..6)
         );
 
-        assert_eq!("TEXT TEXT", srip_ansi_sequences(&cut(&colored_s, ..)));
-        assert_eq!("TEXT T", srip_ansi_sequences(&cut(&colored_s, ..6)));
-        assert_eq!("XT T", srip_ansi_sequences(&cut(&colored_s, 2..6)));
+        assert_eq!("TEXT TEXT", srip_ansi_sequences(&colored_s.cut(..)));
+        assert_eq!("TEXT T", srip_ansi_sequences(&colored_s.cut(..6)));
+        assert_eq!("XT T", srip_ansi_sequences(&colored_s.cut(2..6)));
 
         assert_eq!("\u{1b}[40m\u{1b}[49m", cut("\u{1b}[40m\u{1b}[49m", ..));
     }
@@ -700,65 +734,57 @@ mod tests {
     #[test]
     fn cut_emojies_test() {
         let emojes = "😀😃😄😁😆😅😂🤣🥲😊";
-        assert_eq!(emojes, cut(emojes, ..));
-        assert_eq!("😀", cut(emojes, ..4));
-        assert_eq!("😃😄", cut(emojes, 4..12));
-        assert_eq!("🤣🥲😊", cut(emojes, emojes.find('🤣').unwrap()..));
+        assert_eq!(emojes, emojes.cut(..));
+        assert_eq!("😀", emojes.cut(..4));
+        assert_eq!("😃😄", emojes.cut(4..12));
+        assert_eq!("🤣🥲😊", emojes.cut(emojes.find('🤣').unwrap()..));
     }
 
-    // #[test]
-    // fn cut_colored_str() {
-    //     let s = "something".fg::<Black>().bg::<Blue>().to_string();
-    //     assert_eq!("som".fg::<Black>().bg::<Blue>().to_string(), cut(&s, ..3));
-    //     assert_eq!("some".fg::<Black>().bg::<Blue>().to_string(), cut(&s, ..=3));
-    //     assert_eq!("et".fg::<Black>().bg::<Blue>().to_string(), cut(&s, 3..5));
-    //     assert_eq!("eth".fg::<Black>().bg::<Blue>().to_string(), cut(&s, 3..=5));
-    //     assert_eq!(
-    //         "ething".fg::<Black>().bg::<Blue>().to_string(),
-    //         cut(&s, 3..)
-    //     );
-    // }
+    #[test]
+    // todo: We probably need to fix it.
+    fn cut_colored_x_x_test() {
+        assert_ne!("", cut("\u{1b}[31;40mTEXT\u{1b}[0m", 3..3));
+        assert_ne!(
+            "",
+            cut(
+                "\u{1b}[31;40mTEXT\u{1b}[0m \u{1b}[34;42mTEXT\u{1b}[0m",
+                1..1
+            )
+        );
+        assert_ne!("", cut("\u{1b}[31;40mTEXT\u{1b}[0m", ..0));
+    }
 
-    // #[test]
-    // fn cut_partially_colored_str() {
-    //     let s = format!("zxc_{}_qwe", "something".fg::<Black>().bg::<Blue>());
-    //     assert_eq!("zxc", cut(&s, ..3));
-    //     assert_eq!(
-    //         format!("zxc_{}", "s".fg::<Black>().bg::<Blue>()),
-    //         cut(&s, ..5)
-    //     );
-    //     assert_eq!(
-    //         "ometh".fg::<Black>().bg::<Blue>().to_string(),
-    //         cut(&s, 5..10)
-    //     );
-    //     assert_eq!(
-    //         format!("{}_qwe", "g".fg::<Black>().bg::<Blue>()),
-    //         cut(&s, 12..)
-    //     );
-    // }
+    #[test]
+    fn cut_partially_colored_str_test() {
+        let s = "zxc_\u{1b}[31;40mTEXT\u{1b}[0m_qwe";
+        assert_eq!("zxc", s.cut(..3));
+        assert_eq!("zxc_\u{1b}[31;40mT\u{1b}[39m\u{1b}[49m", s.cut(..5));
+        assert_eq!("\u{1b}[31;40mEXT\u{1b}[0m_q", s.cut(5..10));
+        assert_eq!("\u{1b}[31;40m\u{1b}[0m", s.cut(12..));
+    }
 
-    // #[test]
-    // fn chunks_test() {
-    //     assert_eq!(
-    //         vec!["som".to_string(), "eth".to_string(), "ing".to_string()],
-    //         chunks("something", 3)
-    //     );
-    //     assert_eq!(
-    //         vec![
-    //             "so".to_string(),
-    //             "me".to_string(),
-    //             "th".to_string(),
-    //             "in".to_string(),
-    //             "g".to_string()
-    //         ],
-    //         chunks("something", 2)
-    //     );
-    //     assert_eq!(
-    //         vec!["a".to_string(), "b".to_string(), "c".to_string()],
-    //         chunks("abc", 1)
-    //     );
-    //     assert_eq!(vec!["something".to_string()], chunks("something", 99));
-    // }
+    #[test]
+    fn chunks_not_colored_test() {
+        assert_eq!(
+            vec!["som".to_string(), "eth".to_string(), "ing".to_string()],
+            chunks("something", 3)
+        );
+        assert_eq!(
+            vec![
+                "so".to_string(),
+                "me".to_string(),
+                "th".to_string(),
+                "in".to_string(),
+                "g".to_string()
+            ],
+            chunks("something", 2)
+        );
+        assert_eq!(
+            vec!["a".to_string(), "b".to_string(), "c".to_string()],
+            chunks("abc", 1)
+        );
+        assert_eq!(vec!["something".to_string()], chunks("something", 99));
+    }
 
     #[test]
     #[should_panic]
@@ -766,41 +792,53 @@ mod tests {
         chunks("something", 0);
     }
 
-    // #[test]
-    // fn chunks_colored() {
-    //     let s = "something".fg::<Black>().bg::<Blue>().to_string();
-    //     assert_eq!(
-    //         vec![
-    //             "som".fg::<Black>().bg::<Blue>().to_string(),
-    //             "eth".fg::<Black>().bg::<Blue>().to_string(),
-    //             "ing".fg::<Black>().bg::<Blue>().to_string()
-    //         ],
-    //         chunks(&s, 3)
-    //     );
-    //     assert_eq!(
-    //         vec![
-    //             "so".fg::<Black>().bg::<Blue>().to_string(),
-    //             "me".fg::<Black>().bg::<Blue>().to_string(),
-    //             "th".fg::<Black>().bg::<Blue>().to_string(),
-    //             "in".fg::<Black>().bg::<Blue>().to_string(),
-    //             "g".fg::<Black>().bg::<Blue>().to_string()
-    //         ],
-    //         chunks(&s, 2)
-    //     );
-    //     assert_eq!(
-    //         vec![
-    //             "s".fg::<Black>().bg::<Blue>().to_string(),
-    //             "o".fg::<Black>().bg::<Blue>().to_string(),
-    //             "m".fg::<Black>().bg::<Blue>().to_string(),
-    //             "e".fg::<Black>().bg::<Blue>().to_string(),
-    //             "t".fg::<Black>().bg::<Blue>().to_string(),
-    //             "h".fg::<Black>().bg::<Blue>().to_string(),
-    //             "i".fg::<Black>().bg::<Blue>().to_string(),
-    //             "n".fg::<Black>().bg::<Blue>().to_string(),
-    //             "g".fg::<Black>().bg::<Blue>().to_string(),
-    //         ],
-    //         chunks(&s, 1)
-    //     );
-    //     assert_eq!(vec![s.clone()], chunks(&s, 99));
-    // }
+    #[test]
+    fn chunks_colored() {
+        let text = "\u{1b}[31;40mTEXT\u{1b}[0m";
+        assert_eq!(
+            vec![
+                "\u{1b}[31;40mT\u{1b}[39m\u{1b}[49m",
+                "\u{1b}[31;40mE\u{1b}[39m\u{1b}[49m",
+                "\u{1b}[31;40mX\u{1b}[39m\u{1b}[49m",
+                "\u{1b}[31;40mT\u{1b}[0m"
+            ],
+            chunks(text, 1)
+        );
+        assert_eq!(
+            vec![
+                "\u{1b}[31;40mTE\u{1b}[39m\u{1b}[49m",
+                "\u{1b}[31;40mXT\u{1b}[0m"
+            ],
+            chunks(text, 2)
+        );
+        assert_eq!(
+            vec![
+                "\u{1b}[31;40mTEX\u{1b}[39m\u{1b}[49m",
+                "\u{1b}[31;40mT\u{1b}[0m"
+            ],
+            chunks(text, 3)
+        );
+    }
+
+    #[test]
+    fn chunk_emojies_test() {
+        let emojes = "😀😃😄😁😆😅😂🤣🥲😊";
+        assert_eq!(
+            vec!["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "🥲", "😊",],
+            chunks(emojes, 1)
+        );
+        assert_eq!(
+            vec!["😀😃", "😄😁", "😆😅", "😂🤣", "🥲😊",],
+            chunks(emojes, 2)
+        );
+        assert_eq!(vec!["😀😃😄", "😁😆😅", "😂🤣🥲", "😊",], chunks(emojes, 3));
+        assert_eq!(vec!["😀😃😄😁", "😆😅😂🤣", "🥲😊",], chunks(emojes, 4));
+        assert_eq!(vec!["😀😃😄😁😆", "😅😂🤣🥲😊",], chunks(emojes, 5));
+        assert_eq!(vec!["😀😃😄😁😆😅", "😂🤣🥲😊",], chunks(emojes, 6));
+        assert_eq!(vec!["😀😃😄😁😆😅😂", "🤣🥲😊",], chunks(emojes, 7));
+        assert_eq!(vec!["😀😃😄😁😆😅😂🤣", "🥲😊",], chunks(emojes, 8));
+        assert_eq!(vec!["😀😃😄😁😆😅😂🤣🥲", "😊",], chunks(emojes, 9));
+        assert_eq!(vec!["😀😃😄😁😆😅😂🤣🥲😊"], chunks(emojes, 10));
+        assert_eq!(vec!["😀😃😄😁😆😅😂🤣🥲😊"], chunks(emojes, 11));
+    }
 }
