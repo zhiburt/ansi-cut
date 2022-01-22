@@ -18,13 +18,6 @@
 //! println!("{}", cutted_text);
 //! ```
 
-// todo: 1. Docomentation (A note about panics) + README.md
-//       2. Add a way to index via bytes indexes.
-//       2. Benchmark for byte indexes vs string indexes.
-//       4. Property based tests.
-
-// Make it ansi-string eventually?
-
 use ansi_parser::AnsiSequence;
 use ansi_parser::{AnsiParser, Output};
 use std::ops::{Bound, RangeBounds};
