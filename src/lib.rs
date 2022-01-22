@@ -33,13 +33,26 @@ use std::ops::{Bound, RangeBounds};
 /// about its color defined as ANSI control sequences.
 pub trait AnsiCut {
     /// Cut string from the beginning of the range to the end.
+    /// Preserving its colors.
     ///
-    /// Range is defined in terms of `char`s of the string not containing ANSI
+    /// Range is defined in terms of `byte`s of the string not containing ANSI
     /// control sequences.
+    ///
+    /// Exceeding an upper bound does not panic.
     ///
     /// # Panics
     ///
     /// Panics if a start or end indexes are not on a UTF-8 code point boundary.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use owo_colors::{OwoColorize, colors::*};
+    /// use ansi_cut::AnsiCut;
+    /// let colored_text = format!("{} {} {}", "A".fg::<Black>(), "Colored".fg::<Red>(), "Text".fg::<Blue>()).bg::<Yellow>().to_string();
+    /// let cut_text = colored_text.cut(5..);
+    /// println!("{}", cut_text);
+    /// ```
     fn cut<R>(&self, range: R) -> String
     where
         R: RangeBounds<usize>;
@@ -92,9 +105,6 @@ where
     let string = string.as_ref();
     let (start, end) = bounds_to_usize(bounds.start_bound(), bounds.end_bound());
 
-    // assert!(start <= end, "Starting character index exceeds the last character index! Make sure to use character indices instead of byte indices!");
-    // assert!(end <= string_width, "Upper bound is bigger then a string length");
-
     cut_str(string, start, end)
 }
 
@@ -108,13 +118,6 @@ fn cut_str(string: &str, lower_bound: usize, upper_bound: Option<usize>) -> Stri
         match token {
             Output::TextBlock(text) => {
                 let block_end_index = index + text.len();
-                println!(
-                    "lower_bound={} upper_bound={:?} index={} text.len()={}",
-                    lower_bound,
-                    upper_bound,
-                    index,
-                    text.len()
-                );
                 if lower_bound > block_end_index {
                     index += text.len();
                     continue;
@@ -133,8 +136,6 @@ fn cut_str(string: &str, lower_bound: usize, upper_bound: Option<usize>) -> Stri
                         done = true;
                     }
                 }
-
-                println!("start={} end={}", start, end);
 
                 index += text.len();
 
@@ -160,7 +161,6 @@ fn cut_str(string: &str, lower_bound: usize, upper_bound: Option<usize>) -> Stri
         }
     }
 
-    // println!("{:#?}", asci_state);
     complete_ansi_sequences(&asci_state, &mut buf);
 
     buf
